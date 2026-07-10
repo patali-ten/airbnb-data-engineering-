@@ -1,0 +1,7 @@
+city: edinburgh
+urls:
+  listings: https://data.insideairbnb.com/united-kingdom/scotland/edinburgh/2026-06-23/data/listings.csv.gz
+  calendar: https://data.insideairbnb.com/united-kingdom/scotland/edinburgh/2026-06-23/data/calendar.csv.gz
+  reviews: https://data.insideairbnb.com/united-kingdom/scotland/edinburgh/2026-06-23/data/reviews.csv.gz
+  neighbourhoods: https://data.insideairbnb.com/united-kingdom/scotland/edinburgh/2026-06-23/visualisations/neighbourhoods.csv
+  neighbourhoods_geojson: https://data.insideairbnb.com/united-kingdom/scotland/edinburgh/2026-06-23/visualisations/neighbourhoods.geojson
