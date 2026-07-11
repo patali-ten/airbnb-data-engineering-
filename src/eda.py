@@ -10,6 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import LogNorm
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
@@ -30,6 +31,10 @@ SEQUENTIAL = "#2a78d6"
 
 def load_data() -> pd.DataFrame:
     return pd.read_parquet(PROCESSED_DIR / "listing_master.parquet")
+
+
+def load_calendar() -> pd.DataFrame:
+    return pd.read_parquet(PROCESSED_DIR / "calendar.parquet")
 
 
 def _style_axes(ax, title: str, xlabel: str, ylabel: str) -> None:
@@ -274,14 +279,114 @@ def plot_host_segment_comparison(df: pd.DataFrame) -> dict:
     }
 
 
+def plot_price_by_neighbourhood(df: pd.DataFrame) -> dict:
+    medians = df.groupby("neighbourhood_cleansed")["price"].median().sort_values()
+    ordered = medians.index.tolist()
+
+    # One neutral fill, not per-neighbourhood hues: with 100+ categories,
+    # color can't do identity work anyway -- the sorted axis position and
+    # label already carry it (ascending order here plots highest at the top,
+    # i.e. "sorted descending" reading top-to-bottom).
+    fig, ax = plt.subplots(figsize=(10, max(6, 0.22 * len(ordered))))
+    ax.barh(ordered, medians.values, color=SEQUENTIAL, edgecolor=SURFACE, linewidth=0.3, height=0.7)
+    _style_axes(ax, "Median Price by Neighbourhood — Edinburgh", "Median price (£/night)", "")
+    ax.tick_params(axis="y", labelsize=7.5)
+    fig.tight_layout()
+    _save_fig(fig, "price_by_neighbourhood.png")
+
+    return {
+        "n_neighbourhoods": int(len(ordered)),
+        "highest_median_price_neighbourhood": ordered[-1],
+        "highest_median_price": round(medians.iloc[-1], 2),
+        "lowest_median_price_neighbourhood": ordered[0],
+        "lowest_median_price": round(medians.iloc[0], 2),
+        "citywide_median_price": round(df["price"].median(), 2),
+    }
+
+
+def plot_geographic_scatter(df: pd.DataFrame) -> dict:
+    geo = df.dropna(subset=["latitude", "longitude", "price"])
+
+    # Price is heavily right-skewed (see plot_price_distribution); a linear
+    # color scale would saturate almost every point to one end and hide the
+    # spatial gradient behind a handful of luxury outliers, so price maps to
+    # color on a log scale here. viridis is perceptually uniform and
+    # colorblind-safe, which is what a continuous spatial gradient needs.
+    fig, ax = plt.subplots(figsize=(9, 8))
+    scatter = ax.scatter(
+        geo["longitude"], geo["latitude"], c=geo["price"], cmap="viridis",
+        norm=LogNorm(vmin=geo["price"].min(), vmax=geo["price"].max()),
+        s=14, alpha=0.75, linewidth=0,
+    )
+    _style_axes(ax, "Spatial Price Gradient — Edinburgh Listings", "Longitude", "Latitude")
+    ax.set_aspect("equal", adjustable="datalim")
+    cbar = fig.colorbar(scatter, ax=ax, pad=0.02)
+    cbar.set_label("Price (£/night, log scale)", fontsize=9.5, color=INK_SECONDARY)
+    cbar.ax.tick_params(colors=INK_MUTED, labelsize=8.5)
+    fig.tight_layout()
+    _save_fig(fig, "geographic_price_scatter.png")
+
+    return {
+        "n_listings_plotted": int(len(geo)),
+        "n_listings_missing_coords_or_price": int(len(df) - len(geo)),
+        "lat_range": (round(geo["latitude"].min(), 4), round(geo["latitude"].max(), 4)),
+        "lon_range": (round(geo["longitude"].min(), 4), round(geo["longitude"].max(), 4)),
+    }
+
+
+def plot_seasonal_price_trend(calendar_df: pd.DataFrame) -> dict:
+    # This extract's calendar.csv has no price column at all (see
+    # cleaning.py/standardize_price_columns) -- there's no per-date price to
+    # average by month, so this is surfaced clearly instead of silently
+    # skipping or fabricating a chart from something else.
+    if "price" not in calendar_df.columns:
+        print("plot_seasonal_price_trend: calendar data has no 'price' column -- no figure generated.")
+        return {
+            "status": "unavailable",
+            "reason": "calendar.csv has no price column in this extract",
+        }
+
+    monthly = calendar_df.dropna(subset=["price"]).groupby(calendar_df["date"].dt.month)["price"].mean()
+    monthly = monthly.reindex(range(1, 13))
+    month_labels = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+    peak_month = int(monthly.idxmax())
+
+    fig, ax = plt.subplots(figsize=(9, 6))
+    ax.plot(range(1, 13), monthly.values, color=SEQUENTIAL, linewidth=2, marker="o", markersize=5)
+    ax.scatter(
+        [peak_month], [monthly.loc[peak_month]], color="#d03b3b", s=60, zorder=4,
+        label=f"Peak: {month_labels[peak_month - 1]}",
+    )
+    ax.set_xticks(range(1, 13))
+    ax.set_xticklabels(month_labels)
+    _style_axes(ax, "Average Price by Month — Edinburgh Calendar", "Month", "Average price (£/night)")
+    ax.legend(frameon=False, labelcolor=INK_SECONDARY, fontsize=9.5)
+    fig.tight_layout()
+    _save_fig(fig, "seasonal_price_trend.png")
+
+    return {
+        "status": "ok",
+        "peak_month": month_labels[peak_month - 1],
+        "peak_month_avg_price": round(monthly.loc[peak_month], 2),
+        "lowest_month": month_labels[int(monthly.idxmin()) - 1],
+        "lowest_month_avg_price": round(monthly.min(), 2),
+    }
+
+
 def main() -> None:
     df = load_data()
+    calendar_df = load_calendar()
 
     results = {
         "price_distribution": plot_price_distribution(df),
         "listings_per_host": plot_listings_per_host(df),
         "review_score_distribution": plot_review_score_distribution(df),
         "host_segment_comparison": plot_host_segment_comparison(df),
+        "price_by_neighbourhood": plot_price_by_neighbourhood(df),
+        "geographic_scatter": plot_geographic_scatter(df),
+        "seasonal_price_trend": plot_seasonal_price_trend(calendar_df),
     }
 
     for section, stats in results.items():
