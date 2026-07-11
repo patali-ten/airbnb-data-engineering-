@@ -11,6 +11,8 @@ from pathlib import Path
 import requests
 import yaml
 
+from pipeline_metadata import track_stage
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config" / "city_config.yaml"
 RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
@@ -105,7 +107,8 @@ def decompress_gz(gz_path: Path) -> Path:
     return decompressed_path
 
 
-def download_city_data(city: str, urls: dict) -> None:
+def download_city_data(city: str, urls: dict) -> tuple[int, int]:
+    """Download every configured URL for city, returning (success_count, failure_count)."""
     city_dir = RAW_DATA_DIR / city
     city_dir.mkdir(parents=True, exist_ok=True)
 
@@ -133,6 +136,8 @@ def download_city_data(city: str, urls: dict) -> None:
     else:
         logger.info(f"All files downloaded successfully for {city}")
 
+    return len(urls) - len(failures), len(failures)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Download raw Airbnb data for a city.")
@@ -155,7 +160,13 @@ def main() -> None:
         )
         raise SystemExit(1)
 
-    download_city_data(configured_city, config["urls"])
+    # "rows" don't quite apply to a file download; row_count_in/out here stand
+    # in for the number of URLs attempted vs. successfully fetched.
+    with track_stage(logger, "download", configured_city, row_count_in=len(config["urls"])) as stage:
+        success_count, failure_count = download_city_data(configured_city, config["urls"])
+        stage.row_count_out = success_count
+        if failure_count:
+            raise RuntimeError(f"{failure_count} of {len(config['urls'])} files failed to download")
 
 
 if __name__ == "__main__":

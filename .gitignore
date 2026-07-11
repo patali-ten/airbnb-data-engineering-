@@ -7,3 +7,16 @@ venv/
 __pycache__/
 *.pyc
 .env
+
+# Word temp/lock files
+~$*
+*.tmp
+
+# Logs
+logs/*.log
+
+# Generated DB
+*.db
+
+# Generated quality-check outputs
+output/quality_report/*.csv

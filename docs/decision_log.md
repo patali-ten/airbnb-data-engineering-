@@ -51,3 +51,21 @@ or blocked calendars), not as unpriced/free listings.
 **Why:** The identical missing rate across price and price_quote_* fields suggests they're computed 
 together from the same live-quote step, which fails together rather than independently — consistent 
 with an availability-dependent quote process, not random data loss.
+
+### 2026-07-10 — Missing review scores
+**Options considered:** Impute with global mean, impute with 0, leave as explicit null
+**Decision:** Leave as explicit null
+**Why:** A missing review score means "no reviews yet," not "bad reviews." Imputing a value would misrepresent brand-new listings as average performers.
+**Trade-off accepted:** Downstream aggregate stats (e.g. avg review score by neighbourhood) must explicitly handle nulls, not silently drop rows.
+
+### 2026-07-10 — Revenue estimation methodology
+**Options considered:** No revenue estimate (data doesn't include real bookings); proxy via unavailable-days × price
+**Decision:** Proxy via unavailable-days × price, clearly labeled as an estimate
+**Why:** Inside Airbnb's own methodology notes availability ≠ confirmed bookings; a blocked date could mean owner-block, not a booking. This is the best available proxy without real transaction data.
+**Trade-off accepted:** Revenue figures are directional, not precise — this must be stated as a limitation everywhere the figure is used.
+
+### 2026-07-10 — Incremental processing strategy
+**Options considered:** Full drop-and-reload on every run; true CDC with timestamp-based diffing; upsert on primary key
+**Decision:** Upsert (INSERT OR REPLACE) keyed on listing_id
+**Why:** Simplest approach that genuinely avoids full reprocessing, appropriate for the scale and timeframe of this project.
+**Trade-off accepted:** Doesn't capture deletions (delisted properties) or field-level change history — a production system would want a proper SCD Type 2 dimension or CDC log, noted in Future Improvements.
