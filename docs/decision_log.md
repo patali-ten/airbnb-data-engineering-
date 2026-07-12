@@ -69,3 +69,15 @@ with an availability-dependent quote process, not random data loss.
 **Decision:** Upsert (INSERT OR REPLACE) keyed on listing_id
 **Why:** Simplest approach that genuinely avoids full reprocessing, appropriate for the scale and timeframe of this project.
 **Trade-off accepted:** Doesn't capture deletions (delisted properties) or field-level change history — a production system would want a proper SCD Type 2 dimension or CDC log, noted in Future Improvements.
+
+### 2026-07-12 — Price-prediction feature selection (leakage exclusion)
+**Options considered:** Include all engineered numeric fields in model.py's predictor set, including neighbourhood_median_price, price_per_bedroom, estimated_annual_revenue, and the two price_quote_* fields
+**Decision:** Exclude all five from model.py's feature set before training
+**Why:** Each is computed directly from price itself — neighbourhood_median_price is median(price) grouped by neighbourhood, price_per_bedroom and estimated_annual_revenue are literal formulas involving price, and the price_quote_* fields are raw price-quote artifacts captured at the same scrape step as price. Including any of them would let the model trivially "predict" price from price. This was applied proactively when building model.py's feature list, not as a correction after a VIF check flagged a problem: regression.py's own predictor set (occupancy_rate_365, review_count, avg_review_score, bedrooms, host_tenure_years, room_type) never included neighbourhood_median_price in the first place, so no VIF-driven removal happened there — its VIF values all came back low (~1.0-1.24).
+**Trade-off accepted:** Lose several intuitively strong predictors, but the model's reported performance and SHAP feature-importance ranking reflect genuine predictive signal rather than leakage.
+
+### 2026-07-12 — Model choice for price prediction add-on
+**Options considered:** Compare 3+ model families (full Section 6 scope), or train one strong model well
+**Decision:** Single RandomForestRegressor with SHAP explainability
+**Why:** Given remaining time before submission, depth on one well-validated model with clear explainability beats a shallow multi-model comparison. This was treated as an optional "creative extension," not the full Data Science Challenges section.
+**Trade-off accepted:** No formal model comparison (Linear vs. Tree vs. Gradient Boosting) or hyperparameter tuning — noted as a Future Improvement.
