@@ -22,6 +22,7 @@ Recommended order to review this submission:
 
 ## Repository Structure
 
+```
 airbnb-data-engineering/
 ├── README.md                    ← this file
 ├── requirements.txt
@@ -52,6 +53,7 @@ airbnb-data-engineering/
 └── docs/
 ├── decision_log.md
 └── ai_usage.md
+```
 
 ## Setup
 
